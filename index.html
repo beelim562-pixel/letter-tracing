@@ -1,0 +1,938 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Kids Letter Tracing Game (A-Z)</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Canvas Confetti Library -->
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Comic+Neue:ital,wght@0,400;0,700;1,700&family=Fredoka:wght@500;700&display=swap');
+        
+        body {
+            font-family: 'Comic Neue', 'Chalkboard SE', 'Comic Sans MS', 'Fredoka', cursive, sans-serif;
+            touch-action: none; /* Prevents screen scrolling/bouncing on iPad */
+            user-select: none;
+            -webkit-user-select: none;
+        }
+
+        .gradient-bg {
+            background: linear-gradient(135deg, #e0f2fe 0%, #fbcfe8 50%, #fef08a 100%);
+        }
+
+        .bubble-btn {
+            transition: transform 0.1s ease, box-shadow 0.1s ease;
+            box-shadow: 0 6px 0 rgba(0, 0, 0, 0.15);
+            font-family: 'Comic Neue', 'Chalkboard SE', 'Comic Sans MS', sans-serif;
+        }
+
+        .bubble-btn:active {
+            transform: translateY(4px);
+            box-shadow: 0 2px 0 rgba(0, 0, 0, 0.15);
+        }
+
+        .glass-card {
+            background: rgba(255, 255, 255, 0.92);
+            backdrop-filter: blur(12px);
+            border: 4px solid rgba(255, 255, 255, 0.95);
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.08);
+        }
+
+        /* Smooth touch scrolling for letter selector bar */
+        .smooth-scroll {
+            scroll-behavior: smooth;
+            -webkit-overflow-scrolling: touch;
+            scrollbar-width: thin;
+        }
+
+        .smooth-scroll::-webkit-scrollbar {
+            height: 6px;
+        }
+
+        .smooth-scroll::-webkit-scrollbar-track {
+            background: rgba(241, 245, 249, 0.6);
+            border-radius: 8px;
+        }
+
+        .smooth-scroll::-webkit-scrollbar-thumb {
+            background: rgba(148, 163, 184, 0.5);
+            border-radius: 8px;
+        }
+
+        /* Shake animation for Try Again Modal */
+        @keyframes modalShake {
+            0%, 100% { transform: translateX(0) scale(1); }
+            20%, 60% { transform: translateX(-12px) scale(1.02); }
+            40%, 80% { transform: translateX(12px) scale(1.02); }
+        }
+
+        .animate-shake {
+            animation: modalShake 0.45s ease-in-out;
+        }
+    </style>
+</head>
+<body class="gradient-bg h-screen w-screen overflow-hidden flex flex-col justify-between items-center p-2 sm:p-4">
+
+    <header class="w-full max-w-4xl flex justify-between items-center bg-white/80 backdrop-blur-md rounded-3xl p-2.5 sm:p-4 shadow-lg border-2 border-white/90">
+        <div class="flex items-center gap-2 sm:gap-3">
+            <div class="w-9 h-9 sm:w-12 sm:h-12 bg-amber-400 rounded-2xl flex items-center justify-center text-white text-lg sm:text-2xl shadow-inner">
+                <i class="fa-solid fa-pen-nib"></i>
+            </div>
+            <div>
+                <h1 class="text-xl sm:text-3xl font-black text-slate-800 leading-tight">Tracing A-Z</h1>
+                <p class="text-xs sm:text-sm text-slate-500 font-bold hidden sm:block">Trace inside lines carefully!</p>
+            </div>
+        </div>
+
+        <!-- Accuracy Score / Status Badge -->
+        <div class="flex items-center gap-2 bg-slate-100/90 px-3 sm:px-4 py-1.5 sm:py-2 rounded-2xl border border-slate-200 min-w-[120px] sm:min-w-[160px] justify-center">
+            <span class="text-slate-500 font-extrabold text-xs sm:text-sm">Status:</span>
+            <span id="score-display" class="text-base sm:text-2xl font-black text-indigo-600">Ready</span>
+        </div>
+
+        <!-- Controls -->
+        <div class="flex gap-2">
+            <button id="speaker-btn" class="bubble-btn bg-amber-500 hover:bg-amber-600 text-white font-bold py-2 sm:py-2.5 px-3 sm:px-4 rounded-2xl text-base sm:text-lg flex items-center justify-center gap-1.5" title="Pronounce Letter">
+                <i class="fa-solid fa-volume-high"></i>
+            </button>
+            <button id="sound-toggle" class="bubble-btn bg-purple-500 hover:bg-purple-600 text-white font-bold py-2 sm:py-2.5 px-3 sm:px-4 rounded-2xl text-base sm:text-lg flex items-center justify-center">
+                <i class="fa-solid fa-music" id="sound-icon"></i>
+            </button>
+            <button id="reset-btn" class="bubble-btn bg-rose-500 hover:bg-rose-600 text-white font-bold py-2 sm:py-2.5 px-3 sm:px-4 rounded-2xl text-base sm:text-lg flex items-center justify-center gap-2">
+                <i class="fa-solid fa-rotate-right"></i>
+                <span class="hidden sm:inline">Reset</span>
+            </button>
+        </div>
+    </header>
+
+    <main class="w-full max-w-4xl flex-1 flex flex-col items-center justify-center my-1 sm:my-2 relative">
+        <div class="glass-card rounded-3xl p-2 sm:p-3 relative flex items-center justify-center w-full max-w-[420px] aspect-square">
+            <canvas id="tracing-canvas" class="w-full h-full rounded-2xl cursor-crosshair touch-none"></canvas>
+            
+            <!-- Success Modal -->
+            <div id="success-modal" class="hidden absolute inset-0 bg-black/40 backdrop-blur-md rounded-3xl flex flex-col items-center justify-center p-6 text-center animate-fade-in z-20">
+                <div class="bg-white rounded-3xl p-6 shadow-2xl border-4 border-yellow-300 max-w-xs w-full flex flex-col items-center gap-4">
+                    <div class="w-20 h-20 bg-yellow-400 rounded-full flex items-center justify-center text-white text-4xl shadow-lg animate-bounce">
+                        <i class="fa-solid fa-star"></i>
+                    </div>
+                    <h2 class="text-3xl font-black text-slate-800">Great Job!</h2>
+                    <p class="text-slate-600 font-bold">Tracing Accuracy:</p>
+                    <div id="modal-score" class="text-5xl font-black text-indigo-600">100%</div>
+                    <button id="next-btn" class="bubble-btn w-full bg-emerald-500 hover:bg-emerald-600 text-white font-black py-3 rounded-2xl text-xl mt-2">
+                        Next Letter <i class="fa-solid fa-arrow-right ml-2"></i>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Try Again Modal (Anti-Scribble Triggered) -->
+            <div id="try-again-modal" class="hidden absolute inset-0 bg-black/40 backdrop-blur-md rounded-3xl flex flex-col items-center justify-center p-6 text-center z-20">
+                <div id="try-again-box" class="bg-white rounded-3xl p-6 shadow-2xl border-4 border-rose-400 max-w-xs w-full flex flex-col items-center gap-3">
+                    <div class="w-18 h-18 bg-rose-100 rounded-full flex items-center justify-center text-rose-500 text-4xl p-4 shadow-inner">
+                        <i class="fa-solid fa-face-frown"></i>
+                    </div>
+                    <h2 class="text-3xl font-black text-rose-600">Try Again! 💪</h2>
+                    <p id="try-again-reason" class="text-slate-600 font-bold text-sm">Stay inside the lines & trace carefully from start star!</p>
+                    <button id="retry-btn" class="bubble-btn w-full bg-rose-500 hover:bg-rose-600 text-white font-black py-3 rounded-2xl text-xl mt-2">
+                        Try Again <i class="fa-solid fa-rotate-right ml-2"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Navigation buttons under canvas -->
+        <div class="flex items-center justify-between w-full max-w-[420px] mt-2 px-1">
+            <button id="prev-letter-btn" class="bubble-btn bg-white hover:bg-slate-100 text-indigo-600 font-black py-2 px-4 rounded-2xl text-base sm:text-lg border-2 border-indigo-200 flex items-center gap-2">
+                <i class="fa-solid fa-chevron-left"></i>
+                <span>Prev</span>
+            </button>
+            <div class="text-base sm:text-xl font-black text-slate-700 bg-white/80 px-4 py-1.5 rounded-full border border-white flex items-center gap-2 cursor-pointer" id="letter-title-box">
+                <span>Letter</span>
+                <span id="current-letter-title" class="text-indigo-600 text-2xl font-black">A</span>
+                <i class="fa-solid fa-volume-low text-xs text-indigo-400"></i>
+            </div>
+            <button id="next-letter-btn" class="bubble-btn bg-indigo-600 hover:bg-indigo-700 text-white font-black py-2 px-4 rounded-2xl text-base sm:text-lg flex items-center gap-2">
+                <span>Next</span>
+                <i class="fa-solid fa-chevron-right"></i>
+            </button>
+        </div>
+    </main>
+
+    <footer class="w-full max-w-4xl bg-white/80 backdrop-blur-md rounded-3xl p-2 sm:p-3 shadow-lg border-2 border-white/90 flex items-center gap-1 sm:gap-2">
+        <button id="scroll-left-btn" class="bubble-btn w-10 h-10 sm:w-12 sm:h-12 bg-indigo-100 hover:bg-indigo-200 text-indigo-700 rounded-2xl flex items-center justify-center shrink-0 font-black text-lg sm:text-xl">
+            <i class="fa-solid fa-angle-left"></i>
+        </button>
+
+        <div class="flex items-center gap-2 overflow-x-auto py-1 px-1 smooth-scroll flex-1" id="letter-selector">
+            <!-- Dynamic Letter buttons generated via JS -->
+        </div>
+
+        <button id="scroll-right-btn" class="bubble-btn w-10 h-10 sm:w-12 sm:h-12 bg-indigo-100 hover:bg-indigo-200 text-indigo-700 rounded-2xl flex items-center justify-center shrink-0 font-black text-lg sm:text-xl">
+            <i class="fa-solid fa-angle-right"></i>
+        </button>
+    </footer>
+
+    <script>
+        // Sound and Speech Synthesis Manager
+        class SoundEffects {
+            constructor() {
+                this.ctx = null;
+                this.enabled = true;
+            }
+
+            init() {
+                if (!this.ctx) {
+                    this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+                }
+            }
+
+            // Text to speech letter pronunciation
+            speakLetter(letter) {
+                if (!('speechSynthesis' in window)) return;
+                
+                // Cancel any ongoing speech
+                window.speechSynthesis.cancel();
+
+                const utterance = new SpeechSynthesisUtterance(`Letter ${letter}`);
+                utterance.rate = 0.88; // Slightly slower for clear child-friendly pronunciation
+                utterance.pitch = 1.1; // Friendly pitch
+                utterance.lang = 'en-US';
+
+                window.speechSynthesis.speak(utterance);
+            }
+
+            playTone(freq, type = 'sine', duration = 0.08) {
+                if (!this.enabled) return;
+                this.init();
+                try {
+                    const osc = this.ctx.createOscillator();
+                    const gain = this.ctx.createGain();
+                    osc.type = type;
+                    osc.frequency.setValueAtTime(freq, this.ctx.currentTime);
+                    gain.gain.setValueAtTime(0.12, this.ctx.currentTime);
+                    gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + duration);
+                    osc.connect(gain);
+                    gain.connect(this.ctx.destination);
+                    osc.start();
+                    osc.stop(this.ctx.currentTime + duration);
+                } catch(e) {}
+            }
+
+            playSuccess() {
+                if (!this.enabled) return;
+                const notes = [261.63, 329.63, 392.00, 523.25];
+                notes.forEach((freq, idx) => {
+                    setTimeout(() => this.playTone(freq, 'triangle', 0.25), idx * 100);
+                });
+            }
+
+            playError() {
+                if (!this.enabled) return;
+                this.playTone(180, 'sawtooth', 0.22);
+                setTimeout(() => this.playTone(130, 'sawtooth', 0.28), 120);
+            }
+        }
+
+        const sound = new SoundEffects();
+
+        function sampleCubicBezier(p0, p1, p2, p3, segments = 24) {
+            const points = [];
+            for (let i = 0; i <= segments; i++) {
+                const t = i / segments;
+                const cx = 3 * (p1.x - p0.x);
+                const bx = 3 * (p2.x - p1.x) - cx;
+                const ax = p3.x - p0.x - cx - bx;
+
+                const cy = 3 * (p1.y - p0.y);
+                const by = 3 * (p2.y - p1.y) - cy;
+                const ay = p3.y - p0.y - cy - by;
+
+                const x = ax * Math.pow(t, 3) + bx * Math.pow(t, 2) + cx * t + p0.x;
+                const y = ay * Math.pow(t, 3) + by * Math.pow(t, 2) + cy * t + p0.y;
+                points.push({ x, y });
+            }
+            return points;
+        }
+
+        function sampleArc(cx, cy, radius, startAngle, endAngle, segments = 24) {
+            const points = [];
+            for (let i = 0; i <= segments; i++) {
+                const angle = startAngle + (endAngle - startAngle) * (i / segments);
+                points.push({
+                    x: cx + radius * Math.cos(angle),
+                    y: cy + radius * Math.sin(angle)
+                });
+            }
+            return points;
+        }
+
+        const LETTER_TEMPLATES = {
+            'A': {
+                strokes: [
+                    [{x:50,y:18},{x:32,y:52},{x:18,y:85}],
+                    [{x:50,y:18},{x:68,y:52},{x:82,y:85}],
+                    [{x:32,y:58},{x:50,y:58},{x:68,y:58}]
+                ]
+            },
+            'B': {
+                strokes: [
+                    [{x:28,y:15},{x:28,y:50},{x:28,y:85}],
+                    sampleCubicBezier({x:28,y:15}, {x:75,y:15}, {x:75,y:50}, {x:28,y:50}),
+                    sampleCubicBezier({x:28,y:50}, {x:80,y:50}, {x:80,y:85}, {x:28,y:85})
+                ]
+            },
+            'C': {
+                strokes: [
+                    sampleArc(50, 50, 32, -Math.PI * 0.35, -Math.PI * 1.65, 28)
+                ]
+            },
+            'D': {
+                strokes: [
+                    [{x:28,y:15},{x:28,y:50},{x:28,y:85}],
+                    sampleCubicBezier({x:28,y:15}, {x:85,y:15}, {x:85,y:85}, {x:28,y:85})
+                ]
+            },
+            'E': {
+                strokes: [
+                    [{x:28,y:15},{x:28,y:50},{x:28,y:85}],
+                    [{x:28,y:15},{x:52,y:15},{x:76,y:15}],
+                    [{x:28,y:50},{x:48,y:50},{x:68,y:50}],
+                    [{x:28,y:85},{x:52,y:85},{x:76,y:85}]
+                ]
+            },
+            'F': {
+                strokes: [
+                    [{x:28,y:15},{x:28,y:50},{x:28,y:85}],
+                    [{x:28,y:15},{x:52,y:15},{x:76,y:15}],
+                    [{x:28,y:50},{x:48,y:50},{x:68,y:50}]
+                ]
+            },
+            'G': {
+                strokes: [
+                    sampleArc(50, 50, 32, -Math.PI * 0.35, -Math.PI * 1.70, 28),
+                    [{x:75,y:52},{x:62,y:52},{x:50,y:52}],
+                    [{x:75,y:52},{x:75,y:68},{x:75,y:82}]
+                ]
+            },
+            'H': {
+                strokes: [
+                    [{x:25,y:15},{x:25,y:50},{x:25,y:85}],
+                    [{x:75,y:15},{x:75,y:50},{x:75,y:85}],
+                    [{x:25,y:50},{x:50,y:50},{x:75,y:50}]
+                ]
+            },
+            'I': {
+                strokes: [
+                    [{x:32,y:15},{x:50,y:15},{x:68,y:15}],
+                    [{x:50,y:15},{x:50,y:50},{x:50,y:85}],
+                    [{x:32,y:85},{x:50,y:85},{x:68,y:85}]
+                ]
+            },
+            'J': {
+                strokes: [
+                    [{x:35,y:15},{x:55,y:15},{x:75,y:15}],
+                    [
+                        {x:58,y:15},
+                        {x:58,y:60},
+                        ...sampleArc(40, 60, 18, 0, Math.PI, 14)
+                    ]
+                ]
+            },
+            'K': {
+                strokes: [
+                    [{x:30,y:15},{x:30,y:50},{x:30,y:85}],
+                    [{x:75,y:18},{x:52,y:38},{x:30,y:50}],
+                    [{x:30,y:50},{x:52,y:68},{x:78,y:85}]
+                ]
+            },
+            'L': {
+                strokes: [
+                    [{x:30,y:15},{x:30,y:50},{x:30,y:85}],
+                    [{x:30,y:85},{x:55,y:85},{x:75,y:85}]
+                ]
+            },
+            'M': {
+                strokes: [
+                    [{x:20,y:85},{x:20,y:50},{x:20,y:15}],
+                    [{x:20,y:15},{x:35,y:50},{x:50,y:85}],
+                    [{x:50,y:85},{x:65,y:50},{x:80,y:15}],
+                    [{x:80,y:15},{x:80,y:50},{x:80,y:85}]
+                ]
+            },
+            'N': {
+                strokes: [
+                    [{x:25,y:85},{x:25,y:50},{x:25,y:15}],
+                    [{x:25,y:15},{x:50,y:50},{x:75,y:85}],
+                    [{x:75,y:85},{x:75,y:50},{x:75,y:15}]
+                ]
+            },
+            'O': {
+                strokes: [
+                    sampleArc(50, 50, 30, -Math.PI / 2, -Math.PI / 2 - Math.PI * 2, 28)
+                ]
+            },
+            'P': {
+                strokes: [
+                    [{x:28,y:15},{x:28,y:50},{x:28,y:85}],
+                    sampleCubicBezier({x:28,y:15}, {x:80,y:15}, {x:80,y:50}, {x:28,y:50})
+                ]
+            },
+            'Q': {
+                strokes: [
+                    sampleArc(50, 50, 30, -Math.PI / 2, -Math.PI / 2 - Math.PI * 2, 28),
+                    [{x:55,y:58},{x:70,y:72},{x:82,y:85}]
+                ]
+            },
+            'R': {
+                strokes: [
+                    [{x:25,y:15},{x:25,y:50},{x:25,y:85}],
+                    sampleCubicBezier({x:25,y:15}, {x:78,y:15}, {x:78,y:50}, {x:25,y:50}),
+                    [{x:45,y:50},{x:62,y:68},{x:78,y:85}]
+                ]
+            },
+            'S': {
+                strokes: [
+                    [
+                        ...sampleCubicBezier({x:72, y:24}, {x:48, y:12}, {x:24, y:22}, {x:32, y:42}, 16),
+                        ...sampleCubicBezier({x:32, y:42}, {x:40, y:58}, {x:78, y:52}, {x:68, y:72}, 16),
+                        ...sampleCubicBezier({x:68, y:72}, {x:58, y:88}, {x:34, y:88}, {x:24, y:76}, 12)
+                    ]
+                ]
+            },
+            'T': {
+                strokes: [
+                    [{x:20,y:15},{x:50,y:15},{x:80,y:15}],
+                    [{x:50,y:15},{x:50,y:50},{x:50,y:85}]
+                ]
+            },
+            'U': {
+                strokes: [
+                    [
+                        {x:28,y:15},
+                        {x:28,y:58},
+                        ...sampleArc(50, 58, 22, Math.PI, 0, 16),
+                        {x:72,y:15}
+                    ]
+                ]
+            },
+            'V': {
+                strokes: [
+                    [{x:20,y:15},{x:35,y:50},{x:50,y:85}],
+                    [{x:50,y:85},{x:65,y:50},{x:80,y:15}]
+                ]
+            },
+            'W': {
+                strokes: [
+                    [{x:18,y:15},{x:28,y:85}],
+                    [{x:28,y:85},{x:50,y:40}],
+                    [{x:50,y:40},{x:72,y:85}],
+                    [{x:72,y:85},{x:82,y:15}]
+                ]
+            },
+            'X': {
+                strokes: [
+                    [{x:22,y:15},{x:50,y:50},{x:78,y:85}],
+                    [{x:78,y:15},{x:50,y:50},{x:22,y:85}]
+                ]
+            },
+            'Y': {
+                strokes: [
+                    [{x:22,y:15},{x:50,y:48}],
+                    [{x:78,y:15},{x:50,y:48}],
+                    [{x:50,y:48},{x:50,y:85}]
+                ]
+            },
+            'Z': {
+                strokes: [
+                    [{x:22,y:15},{x:50,y:15},{x:78,y:15}],
+                    [{x:78,y:15},{x:50,y:50},{x:22,y:85}],
+                    [{x:22,y:85},{x:50,y:85},{x:78,y:85}]
+                ]
+            }
+        };
+
+        const canvas = document.getElementById('tracing-canvas');
+        const ctx = canvas.getContext('2d');
+        
+        let currentLetter = 'A';
+        let isDrawing = false;
+        let userPoints = [];
+        
+        let currentStrokeIndex = 0;
+        let completedCheckpoints = new Set();
+        let currentStrokeCheckpoints = [];
+        let allCheckpointsList = [];
+
+        const strokeRadius = 26;
+        const hitRadius = 42;
+
+        function resizeCanvas() {
+            const rect = canvas.getBoundingClientRect();
+            const dpr = window.devicePixelRatio || 1;
+            canvas.width = rect.width * dpr;
+            canvas.height = rect.height * dpr;
+            ctx.scale(dpr, dpr);
+            buildCheckpoints();
+            render();
+        }
+
+        window.addEventListener('resize', resizeCanvas);
+
+        function getCanvasPos(point) {
+            const rect = canvas.getBoundingClientRect();
+            return {
+                x: (point.x / 100) * rect.width,
+                y: (point.y / 100) * rect.height
+            };
+        }
+
+        function buildCheckpoints() {
+            const template = LETTER_TEMPLATES[currentLetter];
+            if (!template) return;
+
+            completedCheckpoints.clear();
+            allCheckpointsList = [];
+
+            template.strokes.forEach((stroke, strokeIdx) => {
+                stroke.forEach((pt, ptIdx) => {
+                    const canvasPos = getCanvasPos(pt);
+                    allCheckpointsList.push({
+                        id: `${strokeIdx}-${ptIdx}`,
+                        strokeIndex: strokeIdx,
+                        pointIndex: ptIdx,
+                        isStart: ptIdx === 0,
+                        isEnd: ptIdx === stroke.length - 1,
+                        x: canvasPos.x,
+                        y: canvasPos.y
+                    });
+                });
+            });
+
+            currentStrokeIndex = 0;
+            updateStrokeCheckpoints();
+        }
+
+        function updateStrokeCheckpoints() {
+            currentStrokeCheckpoints = allCheckpointsList.filter(cp => cp.strokeIndex === currentStrokeIndex);
+        }
+
+        function drawTemplate() {
+            const template = LETTER_TEMPLATES[currentLetter];
+            if (!template) return;
+
+            ctx.lineCap = 'round';
+            ctx.lineJoin = 'round';
+
+            template.strokes.forEach((stroke, idx) => {
+                ctx.beginPath();
+                stroke.forEach((pt, pIdx) => {
+                    const pos = getCanvasPos(pt);
+                    if (pIdx === 0) ctx.moveTo(pos.x, pos.y);
+                    else ctx.lineTo(pos.x, pos.y);
+                });
+
+                if (idx < currentStrokeIndex) {
+                    ctx.strokeStyle = '#bfdbfe';
+                } else if (idx === currentStrokeIndex) {
+                    ctx.strokeStyle = '#dbeafe';
+                } else {
+                    ctx.strokeStyle = '#f1f5f9';
+                }
+
+                ctx.lineWidth = strokeRadius * 2;
+                ctx.stroke();
+
+                ctx.strokeStyle = (idx <= currentStrokeIndex) ? '#93c5fd' : '#e2e8f0';
+                ctx.lineWidth = strokeRadius * 1.2;
+                ctx.stroke();
+            });
+
+            template.strokes.forEach((stroke, idx) => {
+                if (idx === currentStrokeIndex) {
+                    for (let i = 0; i < stroke.length - 1; i++) {
+                        const p1 = getCanvasPos(stroke[i]);
+                        const p2 = getCanvasPos(stroke[i + 1]);
+                        drawDirectionArrows(p1, p2);
+                    }
+                }
+            });
+
+            allCheckpointsList.forEach(cp => {
+                const isCompleted = completedCheckpoints.has(cp.id);
+                
+                if (cp.strokeIndex === currentStrokeIndex && !isCompleted) {
+                    drawStarIcon(cp.x, cp.y, cp.isStart ? 20 : 12, '#fbbf24');
+                } else if (isCompleted) {
+                    drawStarIcon(cp.x, cp.y, 10, '#10b981');
+                }
+            });
+        }
+
+        function drawDirectionArrows(p1, p2) {
+            const dx = p2.x - p1.x;
+            const dy = p2.y - p1.y;
+            const dist = Math.hypot(dx, dy);
+            if (dist < 15) return;
+
+            const angle = Math.atan2(dy, dx);
+            const step = 32;
+
+            ctx.save();
+            ctx.fillStyle = '#3b82f6';
+            for (let d = 20; d < dist - 10; d += step) {
+                const ax = p1.x + (dx / dist) * d;
+                const ay = p1.y + (dy / dist) * d;
+
+                ctx.save();
+                ctx.translate(ax, ay);
+                ctx.rotate(angle);
+                
+                ctx.beginPath();
+                ctx.moveTo(0, 0);
+                ctx.lineTo(-8, -6);
+                ctx.lineTo(-5, 0);
+                ctx.lineTo(-8, 6);
+                ctx.closePath();
+                ctx.fill();
+
+                ctx.restore();
+            }
+            ctx.restore();
+        }
+
+        function drawStarIcon(cx, cy, r, color = '#fbbf24') {
+            ctx.save();
+            ctx.translate(cx, cy);
+            ctx.beginPath();
+            ctx.fillStyle = color;
+            ctx.strokeStyle = '#f59e0b';
+            ctx.lineWidth = 2;
+
+            for (let i = 0; i < 5; i++) {
+                ctx.lineTo(Math.cos((18 + i * 72) * Math.PI / 180) * r, -Math.sin((18 + i * 72) * Math.PI / 180) * r);
+                ctx.lineTo(Math.cos((54 + i * 72) * Math.PI / 180) * (r / 2), -Math.sin((54 + i * 72) * Math.PI / 180) * (r / 2));
+            }
+            ctx.closePath();
+            ctx.fill();
+            ctx.stroke();
+
+            ctx.restore();
+        }
+
+        function drawUserStrokes() {
+            if (userPoints.length < 2) return;
+
+            ctx.lineCap = 'round';
+            ctx.lineJoin = 'round';
+
+            ctx.shadowColor = 'rgba(37, 99, 235, 0.25)';
+            ctx.shadowBlur = 8;
+
+            for (let i = 1; i < userPoints.length; i++) {
+                const pt1 = userPoints[i - 1];
+                const pt2 = userPoints[i];
+
+                if (pt2.isNewStroke) continue;
+
+                ctx.beginPath();
+                ctx.moveTo(pt1.x, pt1.y);
+                ctx.lineTo(pt2.x, pt2.y);
+                ctx.strokeStyle = '#2563eb';
+                ctx.lineWidth = 18;
+                ctx.stroke();
+            }
+
+            ctx.shadowBlur = 0;
+        }
+
+        function render() {
+            const rect = canvas.getBoundingClientRect();
+            ctx.clearRect(0, 0, rect.width, rect.height);
+            drawTemplate();
+            drawUserStrokes();
+        }
+
+        function checkProgress(pos) {
+            if (currentStrokeCheckpoints.length === 0) return;
+
+            currentStrokeCheckpoints.forEach((targetCP, idx) => {
+                if (completedCheckpoints.has(targetCP.id)) return;
+
+                const dist = Math.hypot(pos.x - targetCP.x, pos.y - targetCP.y);
+
+                if (dist <= hitRadius) {
+                    if (idx === 0 || completedCheckpoints.has(currentStrokeCheckpoints[idx - 1].id)) {
+                        completedCheckpoints.add(targetCP.id);
+                        sound.playTone(400 + (completedCheckpoints.size * 35), 'sine', 0.08);
+
+                        const strokeFinished = currentStrokeCheckpoints.every(cp => completedCheckpoints.has(cp.id));
+                        if (strokeFinished) {
+                            const template = LETTER_TEMPLATES[currentLetter];
+                            if (currentStrokeIndex < template.strokes.length - 1) {
+                                currentStrokeIndex++;
+                                updateStrokeCheckpoints();
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        function evaluateTracingQuality() {
+            const template = LETTER_TEMPLATES[currentLetter];
+            if (!template || userPoints.length < 5) {
+                return { isValid: false, reason: "Please trace along the letter lines!", accuracy: 0 };
+            }
+
+            let templatePoints = [];
+            template.strokes.forEach(stroke => {
+                for (let i = 0; i < stroke.length - 1; i++) {
+                    const p1 = getCanvasPos(stroke[i]);
+                    const p2 = getCanvasPos(stroke[i + 1]);
+                    const dist = Math.hypot(p2.x - p1.x, p2.y - p1.y);
+                    const steps = Math.ceil(dist / 4);
+
+                    for (let s = 0; s <= steps; s++) {
+                        templatePoints.push({
+                            x: p1.x + (p2.x - p1.x) * (s / steps),
+                            y: p1.y + (p2.y - p1.y) * (s / steps)
+                        });
+                    }
+                }
+            });
+
+            let outOfBoundCount = 0;
+            const maxAllowedDistance = strokeRadius * 1.4;
+
+            userPoints.forEach(uPt => {
+                let minDist = Infinity;
+                templatePoints.forEach(tPt => {
+                    const d = Math.hypot(uPt.x - tPt.x, uPt.y - tPt.y);
+                    if (d < minDist) minDist = d;
+                });
+
+                if (minDist > maxAllowedDistance) {
+                    outOfBoundCount++;
+                }
+            });
+
+            const outOfBoundRatio = outOfBoundCount / userPoints.length;
+
+            let coveredTemplateCount = 0;
+            const coverageRadius = strokeRadius * 1.25;
+
+            templatePoints.forEach(tPt => {
+                let isCovered = userPoints.some(uPt => Math.hypot(uPt.x - tPt.x, uPt.y - tPt.y) <= coverageRadius);
+                if (isCovered) coveredTemplateCount++;
+            });
+
+            const coverageRatio = coveredTemplateCount / templatePoints.length;
+            const accuracyScore = Math.round((1 - outOfBoundRatio) * coverageRatio * 100);
+
+            if (outOfBoundRatio > 0.25) {
+                return { isValid: false, reason: "Too many scribbles outside the lines!", accuracy: accuracyScore };
+            }
+
+            if (coverageRatio < 0.68) {
+                return { isValid: false, reason: "Make sure to trace the whole letter!", accuracy: accuracyScore };
+            }
+
+            return { isValid: true, reason: "", accuracy: Math.min(100, Math.max(0, accuracyScore)) };
+        }
+
+        function isAllCheckpointsComplete() {
+            return allCheckpointsList.length > 0 && allCheckpointsList.every(cp => completedCheckpoints.has(cp.id));
+        }
+
+        function getEventPos(e) {
+            const rect = canvas.getBoundingClientRect();
+            const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+            const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+            return {
+                x: clientX - rect.left,
+                y: clientY - rect.top
+            };
+        }
+
+        function startTracing(e) {
+            e.preventDefault();
+            isDrawing = true;
+            sound.init();
+            const pos = getEventPos(e);
+            userPoints.push({ x: pos.x, y: pos.y, isNewStroke: true });
+            
+            checkProgress(pos);
+            document.getElementById('score-display').innerText = `Tracing...`;
+            document.getElementById('score-display').className = 'text-base sm:text-2xl font-black text-amber-500';
+            
+            render();
+        }
+
+        function moveTracing(e) {
+            if (!isDrawing) return;
+            e.preventDefault();
+            const pos = getEventPos(e);
+            
+            userPoints.push({ x: pos.x, y: pos.y, isNewStroke: false });
+            checkProgress(pos);
+
+            render();
+        }
+
+        function stopTracing(e) {
+            if (!isDrawing) return;
+            isDrawing = false;
+
+            if (isAllCheckpointsComplete()) {
+                const result = evaluateTracingQuality();
+
+                if (result.isValid && result.accuracy >= 68) {
+                    document.getElementById('score-display').innerText = `${result.accuracy}%`;
+                    document.getElementById('score-display').className = 'text-base sm:text-2xl font-black text-emerald-600';
+                    triggerSuccess(result.accuracy);
+                } else {
+                    document.getElementById('score-display').innerText = `Try Again`;
+                    document.getElementById('score-display').className = 'text-base sm:text-2xl font-black text-rose-500';
+                    triggerTryAgain(result.reason);
+                }
+            } else {
+                const template = LETTER_TEMPLATES[currentLetter];
+                document.getElementById('score-display').innerText = `Stroke ${currentStrokeIndex + 1}/${template.strokes.length}`;
+                document.getElementById('score-display').className = 'text-base sm:text-2xl font-black text-indigo-600';
+            }
+        }
+
+        function triggerSuccess(score) {
+            sound.playSuccess();
+            document.getElementById('modal-score').innerText = `${score}%`;
+            document.getElementById('success-modal').classList.remove('hidden');
+
+            if (typeof confetti === 'function') {
+                confetti({
+                    particleCount: 120,
+                    spread: 80,
+                    origin: { y: 0.6 }
+                });
+            }
+        }
+
+        function triggerTryAgain(reasonMsg) {
+            sound.playError();
+            document.getElementById('try-again-reason').innerText = reasonMsg || "Stay inside the lines & trace carefully!";
+            
+            const modal = document.getElementById('try-again-modal');
+            const box = document.getElementById('try-again-box');
+            
+            modal.classList.remove('hidden');
+            box.classList.remove('animate-shake');
+            void box.offsetWidth;
+            box.classList.add('animate-shake');
+        }
+
+        function initLetterSelector() {
+            const selectorContainer = document.getElementById('letter-selector');
+            selectorContainer.innerHTML = '';
+
+            Object.keys(LETTER_TEMPLATES).forEach(letter => {
+                const btn = document.createElement('button');
+                btn.id = `letter-btn-${letter}`;
+                const isActive = letter === currentLetter;
+                btn.className = `bubble-btn w-10 h-10 sm:w-12 sm:h-12 rounded-2xl text-xl sm:text-2xl font-black flex items-center justify-center shrink-0 ${
+                    isActive 
+                        ? 'bg-indigo-600 text-white shadow-lg scale-105 border-2 border-indigo-400' 
+                        : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                }`;
+                btn.innerText = letter;
+                btn.onclick = () => selectLetter(letter);
+                selectorContainer.appendChild(btn);
+            });
+
+            document.getElementById('current-letter-title').innerText = currentLetter;
+
+            setTimeout(() => {
+                const activeBtn = document.getElementById(`letter-btn-${currentLetter}`);
+                if (activeBtn) {
+                    activeBtn.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+                }
+            }, 50);
+        }
+
+        function selectLetter(letter) {
+            currentLetter = letter;
+            resetCanvas();
+            initLetterSelector();
+            
+            // Pronounce letter aloud
+            sound.speakLetter(currentLetter);
+        }
+
+        function resetCanvas() {
+            userPoints = [];
+            completedCheckpoints.clear();
+            currentStrokeIndex = 0;
+            
+            document.getElementById('score-display').innerText = 'Ready';
+            document.getElementById('score-display').className = 'text-base sm:text-2xl font-black text-indigo-600';
+            document.getElementById('success-modal').classList.add('hidden');
+            document.getElementById('try-again-modal').classList.add('hidden');
+            
+            buildCheckpoints();
+            render();
+        }
+
+        function navigateLetter(delta) {
+            const letters = Object.keys(LETTER_TEMPLATES);
+            const currentIndex = letters.indexOf(currentLetter);
+            let nextIndex = currentIndex + delta;
+            if (nextIndex < 0) nextIndex = letters.length - 1;
+            if (nextIndex >= letters.length) nextIndex = 0;
+            selectLetter(letters[nextIndex]);
+        }
+
+        // Event listeners for user interaction
+        canvas.addEventListener('mousedown', startTracing);
+        canvas.addEventListener('mousemove', moveTracing);
+        canvas.addEventListener('mouseup', stopTracing);
+        canvas.addEventListener('mouseleave', stopTracing);
+
+        canvas.addEventListener('touchstart', startTracing, { passive: false });
+        canvas.addEventListener('touchmove', moveTracing, { passive: false });
+        canvas.addEventListener('touchend', stopTracing);
+
+        document.getElementById('reset-btn').addEventListener('click', resetCanvas);
+        document.getElementById('prev-letter-btn').addEventListener('click', () => navigateLetter(-1));
+        document.getElementById('next-letter-btn').addEventListener('click', () => navigateLetter(1));
+        document.getElementById('next-btn').addEventListener('click', () => navigateLetter(1));
+        document.getElementById('retry-btn').addEventListener('click', resetCanvas);
+
+        document.getElementById('speaker-btn').addEventListener('click', () => sound.speakLetter(currentLetter));
+        document.getElementById('letter-title-box').addEventListener('click', () => sound.speakLetter(currentLetter));
+
+        const letterBar = document.getElementById('letter-selector');
+        document.getElementById('scroll-left-btn').addEventListener('click', () => {
+            letterBar.scrollBy({ left: -220, behavior: 'smooth' });
+        });
+        document.getElementById('scroll-right-btn').addEventListener('click', () => {
+            letterBar.scrollBy({ left: 220, behavior: 'smooth' });
+        });
+
+        const soundBtn = document.getElementById('sound-toggle');
+        const soundIcon = document.getElementById('sound-icon');
+        soundBtn.addEventListener('click', () => {
+            sound.enabled = !sound.enabled;
+            soundIcon.className = sound.enabled ? 'fa-solid fa-music' : 'fa-solid fa-volume-xmark';
+        });
+
+        window.onload = () => {
+            initLetterSelector();
+            setTimeout(() => {
+                resizeCanvas();
+                sound.speakLetter(currentLetter);
+            }, 100);
+        };
+    </script>
+</body>
+</html>
